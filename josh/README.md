@@ -24,6 +24,10 @@ streamlit run josh/dashboard.py
 The first load calls the World Bank API for country metadata, electricity access
 (`EG.ELC.ACCS.ZS`), and population (`SP.POP.TOTL`). It may take several seconds.
 Results are cached for 24 hours; Streamlit's **Clear cache** fetches again.
+The sidebar links to **Explore the map**, a second page where you can click
+country markers into comparison slots A and B, or use the country dropdowns.
+The two country charts share the same axes for comparison. The map displays
+only comparable countries for which World Bank country coordinates are available.
 
 ## Method
 
@@ -43,10 +47,12 @@ Missing intermediate observations appear as gaps in the charts.
 
 ## Demo story
 
-1. Choose a period with paradox cases and read the global count.
-2. Highlight one country from the priority list.
-3. Compare its two trend charts and show the source years and calculation.
-4. Explain how this helps an analyst notice where a percentage-only progress
+1. Open the app on its default period: the strongest flagged country appears first.
+2. Read the reveal, then point to the blue access-rate chart and orange unserved-count chart.
+3. Show the threshold: the endpoint access rate needed to hold the earlier gap steady.
+   This is a retrospective benchmark using the endpoint population, not a forecast.
+4. Explore the priority ranking and export it as CSV; inspect a country's raw annual values.
+5. Explain how an analyst can investigate places where a percentage-only progress
    report misses a growing number of people without access.
 
 Sources: [World Bank electricity access](https://data.worldbank.org/indicator/EG.ELC.ACCS.ZS),

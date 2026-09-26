@@ -35,7 +35,7 @@ def load_world_bank_data():
         results = {name: future.result() for name, future in futures.items()}
 
     countries = {
-        item["id"]: item["name"]
+        item["id"]: item
         for item in results["countries"][0]
         if item.get("region", {}).get("value") != "Aggregates"
     }
@@ -58,7 +58,9 @@ def load_world_bank_data():
             continue
         rows.append({
             "code": code,
-            "country": countries[code],
+            "country": countries[code]["name"],
+            "latitude": _coordinate(countries[code].get("latitude")),
+            "longitude": _coordinate(countries[code].get("longitude")),
             "year": year,
             "access_rate": float(rate),
             "population": int(pop),
@@ -83,10 +85,14 @@ def compare_years(rows, start_year, end_year):
         comparisons.append({
             "code": code,
             "country": after["country"],
+            "latitude": after.get("latitude"),
+            "longitude": after.get("longitude"),
             "start_rate": before["access_rate"],
             "end_rate": after["access_rate"],
             "start_unserved": before["unserved"],
             "end_unserved": after["unserved"],
+            "start_population": before["population"],
+            "end_population": after["population"],
             "population_change": after["population"] - before["population"],
             "served_change": (after["population"] - after["unserved"]) - (before["population"] - before["unserved"]),
             "delta_rate": delta_rate,
@@ -94,3 +100,10 @@ def compare_years(rows, start_year, end_year):
             "paradox": delta_rate > 0 and delta_unserved > 0,
         })
     return sorted(comparisons, key=lambda r: r["delta_unserved"], reverse=True)
+
+
+def _coordinate(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
