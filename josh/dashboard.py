@@ -12,6 +12,11 @@ from theme import apply_theme, BLUE, ORANGE, SURFACE, GRID
 
 st.set_page_config(page_title="The Progress Paradox", page_icon="⚡", layout="wide")
 apply_theme()
+view = st.sidebar.radio("Explore", ("Dashboard", "Map & compare"), horizontal=True)
+if view == "Map & compare":
+    from map_view import render_map
+    render_map()
+    st.stop()
 
 
 def compact(number):
@@ -25,7 +30,7 @@ def compact(number):
 st.markdown('<span class="eyebrow">WORLD BANK DATA · ELECTRICITY ACCESS</span>', unsafe_allow_html=True)
 st.title("The Progress Paradox")
 st.caption("An early warning when a better percentage hides a growing number of people without electricity")
-st.page_link("pages/1_Explore_the_map.py", label="Explore the interactive map and compare two countries →", icon="🌍")
+st.caption("Choose **Map & compare** in the sidebar to explore countries visually.")
 
 
 @st.cache_data(ttl=24 * 60 * 60, show_spinner=False)

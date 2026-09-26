@@ -24,8 +24,9 @@ streamlit run josh/dashboard.py
 The first load calls the World Bank API for country metadata, electricity access
 (`EG.ELC.ACCS.ZS`), and population (`SP.POP.TOTL`). It may take several seconds.
 Results are cached for 24 hours; Streamlit's **Clear cache** fetches again.
-The sidebar links to **Explore the map**, a second page where you can click
-country markers into comparison slots A and B, or use the country dropdowns.
+Choose **Map & compare** from the dashboard's sidebar to click country markers
+into comparison slots A and B, or use the country dropdowns. This selector works
+even when Streamlit's automatic page navigation is hidden.
 The two country charts share the same axes for comparison. The map displays
 only comparable countries for which World Bank country coordinates are available.
 
