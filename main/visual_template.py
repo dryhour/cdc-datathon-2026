@@ -1,15 +1,11 @@
-"""Derek's visual workbench. Run: python3 -m streamlit run derek/visual_template.py"""
-
-from pathlib import Path
-import sys
+"""Derek's visual workbench. Run: streamlit run main/visual_template.py"""
 
 import plotly.graph_objects as go
 import streamlit as st
 
-# Keep the data logic in josh/progress.py; this file is safe to redesign freely.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "josh"))
-from progress import compare_years, load_world_bank_data  # noqa: E402
-from theme import apply_theme, chart_style, BLUE, ORANGE, GRID  # noqa: E402
+# Keep the data logic in progress.py; this file is safe to redesign freely.
+from progress import compare_years, load_world_bank_data
+from theme import apply_theme, chart_style, BLUE, ORANGE, GRID
 
 st.set_page_config(page_title="Visual workbench · Progress Paradox", page_icon="🎨", layout="wide")
 apply_theme()

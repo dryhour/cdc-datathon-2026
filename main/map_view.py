@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from progress import compare_years, load_world_bank_data
+from trend_tests import render_co_movement
 from theme import apply_theme, BLUE, ORANGE, TEAL, MUTED, SURFACE, GRID
 
 
@@ -131,10 +132,25 @@ def render_map():
         st.info("Choose two different countries to compare their trajectories.")
         st.stop()
 
-    shared_unserved_max = max(
-        row["unserved"] for row in rows
-        if row["code"] in (a, b) and start <= row["year"] <= end
-    ) / 1_000_000 * 1.1
+    def period_history(code):
+        history = pd.DataFrame([r for r in rows if r["code"] == code and start <= r["year"] <= end])
+        # Reindex so missing observations break the line rather than imply measured values.
+        return history.set_index("year").reindex(range(start, end + 1)).rename_axis("year").reset_index()
+
+    def percent_change(history, column):
+        """Percent change from the start year, so both series share one unit (None if the start is 0)."""
+        base = history.loc[history["year"] == start, column].iloc[0]
+        return (history[column] / base - 1) * 100 if base else None
+
+    histories = {code: period_history(code) for code in (a, b)}
+    changes = {code: (percent_change(h, "access_rate"), percent_change(h, "unserved"))
+               for code, h in histories.items()}
+    # One y-range for both panels so A and B are read on the same scale.
+    values = [v for pair in changes.values() for v in pair if v is not None]
+    low = min(0, *(v.min() for v in values))
+    high = max(0, *(v.max() for v in values))
+    pad = max(high - low, 1) * 0.1
+    shared_range = [low - pad, high + pad]
 
     def country_panel(code, label):
         row = by_code[code]
@@ -145,29 +161,37 @@ def render_map():
         gap_change = row["delta_unserved"]
         y.metric("People without access", compact(row["end_unserved"]),
                  f"{'+' if gap_change > 0 else ''}{compact(gap_change)} since {start}", delta_color="inverse")
-        history = pd.DataFrame([r for r in rows if r["code"] == code and start <= r["year"] <= end])
-        history = history.set_index("year").reindex(range(start, end + 1)).rename_axis("year").reset_index()
+        history = histories[code]
+        access_change, unserved_change = changes[code]
         figure = go.Figure()
-        figure.add_trace(go.Scatter(x=history["year"], y=history["access_rate"], name="Access rate (%)",
-                                    mode="lines+markers", connectgaps=False,
-                                    line=dict(color=BLUE, width=3)))
-        figure.add_trace(go.Scatter(x=history["year"], y=history["unserved"] / 1_000_000,
-                                    name="Without access (millions)", mode="lines+markers",
-                                    connectgaps=False, line=dict(color=ORANGE, width=3), yaxis="y2"))
+        figure.add_trace(go.Scatter(x=history["year"], y=access_change, customdata=history["access_rate"],
+                                    name="Access rate", mode="lines+markers", connectgaps=False,
+                                    line=dict(color=BLUE, width=3),
+                                    hovertemplate="%{x}: %{y:+.1f}% (%{customdata:.1f}% access)<extra></extra>"))
+        if unserved_change is not None:
+            figure.add_trace(go.Scatter(x=history["year"], y=unserved_change,
+                                        customdata=history["unserved"] / 1_000_000,
+                                        name="People without access", mode="lines+markers", connectgaps=False,
+                                        line=dict(color=ORANGE, width=3),
+                                        hovertemplate="%{x}: %{y:+.1f}% (%{customdata:,.2f}M people)<extra></extra>"))
+        figure.add_hline(y=0, line=dict(color=GRID, width=2))
         figure.update_layout(height=330, paper_bgcolor=SURFACE, plot_bgcolor=SURFACE,
-                             font_color="#edf3fb", margin=dict(l=30, r=40, t=35, b=35),
+                             font_color="#edf3fb", margin=dict(l=30, r=20, t=35, b=35),
                              xaxis=dict(dtick=1, gridcolor=GRID),
-                             yaxis=dict(title="Access (%)", gridcolor=GRID, range=[0, 100]),
-                             yaxis2=dict(title="People (M)", overlaying="y", side="right",
-                                         range=[0, shared_unserved_max]),
+                             yaxis=dict(title=f"% change since {start}", ticksuffix="%", gridcolor=GRID,
+                                        range=shared_range),
                              legend=dict(orientation="h", y=1.15))
-        st.plotly_chart(figure, width="stretch")
+        st.plotly_chart(figure, key=f"country_chart_{label}", width="stretch")
+        if unserved_change is None:
+            st.caption(f"No one was estimated to be without electricity in {start}, so only the access rate is shown.")
         if row["paradox"]:
             threshold = 100 * (1 - row["start_unserved"] / row["end_population"])
             st.warning(f"To hold the {start} gap steady at {end}'s population, access would have "
                        f"needed to reach **{threshold:.1f}%**, versus the reported **{row['end_rate']:.1f}%**.")
         else:
             st.success("This country does not meet the paradox rule for this period.")
+        st.markdown("**Do the two trends move together?**")
+        render_co_movement(history, start, end, row["country"], compact=True)
         with st.expander("See endpoint calculation"):
             st.write(f"{start}: {row['start_population']:,.0f} × (1 − {row['start_rate']:.2f}/100) "
                      f"= {row['start_unserved']:,.0f} estimated people without access")
@@ -180,6 +204,8 @@ def render_map():
     with col_b:
         country_panel(b, "B")
 
+    st.caption(f"Both charts show the percent change from {start} on the same scale, so A and B can be "
+               "compared directly. Hover for the reported values.")
     st.caption("Source: World Bank Indicators API. Estimates inherit uncertainty and revisions in reported rates and population. "
                f"Access API updated {updates['access'] or 'date unspecified'}; population API updated "
                f"{updates['population'] or 'date unspecified'}. The comparison is descriptive, not a causal claim.")

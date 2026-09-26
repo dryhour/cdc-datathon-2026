@@ -8,6 +8,8 @@ from urllib.request import urlopen
 BASE = "https://api.worldbank.org/v2"
 ACCESS = "EG.ELC.ACCS.ZS"
 POPULATION = "SP.POP.TOTL"
+# Long history so per-country time-series tests have enough annual observations.
+YEARS = "1990:2024"
 
 
 def fetch_json(path, **params):
@@ -19,7 +21,7 @@ def fetch_json(path, **params):
     return data[1], data[0].get("lastupdated")
 
 
-def load_world_bank_data():
+def load_world_bank_data(years=YEARS):
     """Fetch live country metadata and time series; return rows and update dates."""
     paths = {
         "countries": "country",
@@ -28,7 +30,7 @@ def load_world_bank_data():
     }
     with ThreadPoolExecutor(max_workers=3) as pool:
         futures = {
-            name: pool.submit(fetch_json, path, date="2015:2024")
+            name: pool.submit(fetch_json, path, date=years)
             if name != "countries" else pool.submit(fetch_json, path)
             for name, path in paths.items()
         }
@@ -82,6 +84,11 @@ def compare_years(rows, start_year, end_year):
             continue
         delta_rate = after["access_rate"] - before["access_rate"]
         delta_unserved = after["unserved"] - before["unserved"]
+        # Exact split of the gap change (midpoint weights): population_effect + access_effect == delta_unserved.
+        mean_unserved_share = 1 - (before["access_rate"] + after["access_rate"]) / 200
+        mean_population = (before["population"] + after["population"]) / 2
+        population_effect = (after["population"] - before["population"]) * mean_unserved_share
+        access_effect = -delta_rate / 100 * mean_population
         comparisons.append({
             "code": code,
             "country": after["country"],
@@ -97,6 +104,8 @@ def compare_years(rows, start_year, end_year):
             "served_change": (after["population"] - after["unserved"]) - (before["population"] - before["unserved"]),
             "delta_rate": delta_rate,
             "delta_unserved": delta_unserved,
+            "population_effect": population_effect,
+            "access_effect": access_effect,
             "paradox": delta_rate > 0 and delta_unserved > 0,
         })
     return sorted(comparisons, key=lambda r: r["delta_unserved"], reverse=True)
