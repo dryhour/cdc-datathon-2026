@@ -100,3 +100,17 @@ These are estimates built from reported rates; they describe what happened and d
 - Box & Jenkins (1970), *Time Series Analysis: Forecasting and Control* — PACF.
 - Kitagawa (1955), *JASA* 50(272) — decomposing a change into components.
 - Seabold & Perktold (2010), *statsmodels*, Proc. 9th Python in Science Conference.
+
+## Images
+
+<img width="1440" height="900" alt="Screenshot 2026-09-27 at 11 02 18" src="https://github.com/user-attachments/assets/c0adb82c-ec8f-4ece-9feb-47fa3de0127f" />
+<img width="1440" height="900" alt="Screenshot 2026-09-27 at 11 02 30" src="https://github.com/user-attachments/assets/f32dfb1d-24ea-4593-ba1f-24dc519652dd" />
+<img width="1440" height="900" alt="Screenshot 2026-09-27 at 11 02 44" src="https://github.com/user-attachments/assets/b7bb15d5-a52d-4e22-b592-c37c84c56cd9" />
+<img width="1440" height="900" alt="Screenshot 2026-09-27 at 11 02 55" src="https://github.com/user-attachments/assets/c09a4c5d-938c-4622-a2cc-47bde1273ad8" />
+<img width="1440" height="900" alt="Screenshot 2026-09-27 at 11 03 05" src="https://github.com/user-attachments/assets/14659531-08cc-4487-aeae-a216d90462b8" />
+<img width="1440" height="900" alt="Screenshot 2026-09-27 at 11 03 13" src="https://github.com/user-attachments/assets/416fbb9f-71b6-4356-ba6d-86d3f4466e70" />
+<img width="1440" height="900" alt="Screenshot 2026-09-27 at 11 03 26" src="https://github.com/user-attachments/assets/adfc3b09-bbaf-4eb9-a262-9048c7b9b208" />
+<img width="1440" height="900" alt="Screenshot 2026-09-27 at 11 03 38" src="https://github.com/user-attachments/assets/52276aa1-6d5f-44f8-b72d-2593d51bc977" />
+<img width="1440" height="900" alt="Screenshot 2026-09-27 at 11 03 50" src="https://github.com/user-attachments/assets/652fc5b2-0e6f-4a0f-9c39-718505b90ad7" />
+
+<img width="1440" height="900" alt="Screenshot 2026-09-27 at 11 04 01" src="https://github.com/user-attachments/assets/0d1d4aa7-7136-4aa0-b34b-3a0df38fb720" />
