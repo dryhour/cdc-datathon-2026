@@ -8,16 +8,11 @@ import streamlit as st
 from statsmodels.stats.diagnostic import acorr_ljungbox
 
 from progress import YEARS, compare_years, load_world_bank_data
-from trend_tests import MIN_TEST_YEARS, lag1_pacf, render_co_movement, stationarity
-from theme import apply_theme, BLUE, ORANGE, SURFACE, GRID
+from trend_tests import MIN_TEST_YEARS, co_movement, comparison_rows, lag1_pacf, render_co_movement, stationarity
+from theme import apply_theme, BLUE, ORANGE, TEAL, MUTED, SURFACE, GRID
 
 st.set_page_config(page_title="The Progress Paradox", page_icon="⚡", layout="wide")
 apply_theme()
-view = st.sidebar.radio("Explore", ("Dashboard", "Map & compare"), horizontal=True)
-if view == "Map & compare":
-    from map_view import render_map
-    render_map()
-    st.stop()
 
 
 def compact(number):
@@ -31,7 +26,6 @@ def compact(number):
 st.markdown('<span class="eyebrow">WORLD BANK DATA · ELECTRICITY ACCESS</span>', unsafe_allow_html=True)
 st.title("The Progress Paradox")
 st.caption("An early warning when a better percentage hides a growing number of people without electricity")
-st.caption("Choose **Map & compare** in the sidebar to explore countries visually.")
 
 
 @st.cache_data(ttl=24 * 60 * 60, show_spinner=False)
@@ -77,26 +71,89 @@ relevant = per_country[(per_country["access_values"] >= 3) & (per_country["gap_v
 testable = set(relevant[relevant["years"] >= MIN_TEST_YEARS].index)
 if testable:
     keep = testable
-    option_note = (f"Showing {len(keep)} of {len(compared)} countries with at least {MIN_TEST_YEARS} years "
-                   f"of data and a changing access gap in {start}–{end}.")
+    option_note = (f"The map shows {len(keep)} of {len(compared)} countries: those with at least {MIN_TEST_YEARS} "
+                   f"years of data and a changing access gap in {start}–{end}.")
 elif len(relevant):
     keep = set(relevant.index)
-    option_note = (f"Showing {len(keep)} countries with a changing access gap. Choose a period of at least "
+    option_note = (f"The map shows {len(keep)} countries with a changing access gap. Choose a period of at least "
                    f"{MIN_TEST_YEARS} years to run the correlation tests.")
 else:
     keep = {r["code"] for r in compared}
-    option_note = "No country has a changing access gap in this period, so all countries are listed."
+    option_note = "No country has a changing access gap in this period, so all countries are shown."
 
 country_options = sorted((r for r in compared if r["code"] in keep), key=lambda r: r["country"])
 eligible_paradoxes = [r for r in paradoxes if r["code"] in keep]
 default_code = eligible_paradoxes[0]["code"] if eligible_paradoxes else country_options[0]["code"]
-selected_code = st.selectbox(
-    "Explore a country", [r["code"] for r in country_options],
-    index=[r["code"] for r in country_options].index(default_code),
-    format_func=lambda code: next(r["country"] for r in country_options if r["code"] == code),
+STATUS_COLORS = {"Hidden gap grew": ORANGE, "Gap shrank": TEAL, "Other change": MUTED}
+
+
+def status(row):
+    if row["paradox"]:
+        return "Hidden gap grew"
+    return "Gap shrank" if row["delta_unserved"] < 0 else "Other change"
+
+
+# The map is the country picker for two slots; keep each choice while it stays available for the period.
+available = [r["code"] for r in country_options]
+if st.session_state.get("selected_code") not in available:
+    st.session_state["selected_code"] = default_code
+if st.session_state.get("compare_code") not in available:
+    others = [r["code"] for r in eligible_paradoxes] + available
+    st.session_state["compare_code"] = next((c for c in others if c != st.session_state["selected_code"]),
+                                            st.session_state["selected_code"])
+RING = {"selected_code": "#ffffff", "compare_code": BLUE}
+
+
+def ring(code, part):
+    for slot, color in RING.items():
+        if code == st.session_state[slot]:
+            return color if part == "color" else 3
+    return "#071424" if part == "color" else 1
+
+
+mapped = [r for r in country_options if r["latitude"] is not None and r["longitude"] is not None]
+st.subheader("Click a country on the map")
+slot_label = st.radio("A map click sets the", ["Main country", "Comparison country"], horizontal=True,
+                      key="map_slot")
+slot = "selected_code" if slot_label == "Main country" else "compare_code"
+st.caption("Orange = access rose but the number without electricity also rose (the paradox) · "
+           "Teal = the gap shrank · Gray = other change. Marker size shows people without electricity "
+           f"in {end}. White ring = main country · blue ring = comparison country.")
+map_fig = go.Figure(go.Scattergeo(
+    lat=[r["latitude"] for r in mapped], lon=[r["longitude"] for r in mapped],
+    text=[r["country"] for r in mapped],
+    customdata=[[r["delta_rate"], r["delta_unserved"] / 1_000_000, r["end_unserved"] / 1_000_000] for r in mapped],
+    marker=dict(size=[max(7, min(37, 7 + (r["end_unserved"] / 1_000_000) ** .5 * 2.2)) for r in mapped],
+                color=[STATUS_COLORS[status(r)] for r in mapped], opacity=.85,
+                line=dict(color=[ring(r["code"], "color") for r in mapped],
+                          width=[ring(r["code"], "width") for r in mapped])),
+    mode="markers",
+    hovertemplate=("<b>%{text}</b><br>Access change: %{customdata[0]:+.1f} points"
+                   "<br>Change in people without access: %{customdata[1]:+.2f}M"
+                   "<br>Without access at end: %{customdata[2]:.2f}M<extra></extra>"),
+))
+map_fig.update_layout(
+    height=480, margin=dict(l=0, r=0, t=10, b=0), paper_bgcolor="#101d31", font_color="#edf3fb",
+    clickmode="event+select", dragmode=False,
+    geo=dict(projection_type="natural earth", showland=True, landcolor="#203550", showocean=True,
+             oceancolor="#101d31", showlakes=False, showcountries=True, countrycolor="#47617b",
+             bgcolor="#101d31"),
 )
-st.caption(option_note)
+# Keying by period resets the click state when the years (and so the marker list) change.
+event = st.plotly_chart(map_fig, key=f"country_map_{start}_{end}", on_select="rerun",
+                        selection_mode="points", width="stretch")
+points = event.selection.points if event else []
+indices = [p["point_index"] for p in points if "point_index" in p]
+clicked = mapped[indices[-1]]["code"] if indices and 0 <= indices[-1] < len(mapped) else None
+if clicked and clicked != st.session_state.get(f"last_click_{start}_{end}"):
+    # Only a new click fills a slot, so flipping the toggle doesn't move the old click into the other slot.
+    st.session_state[f"last_click_{start}_{end}"] = clicked
+    st.session_state[slot] = clicked
+    st.rerun()  # redraw so the rings move to the new countries
+selected_code = st.session_state["selected_code"]
 chosen = next(r for r in country_options if r["code"] == selected_code)
+compare = next(r for r in country_options if r["code"] == st.session_state["compare_code"])
+st.caption(f"Main: **{chosen['country']}** · Comparison: **{compare['country']}**. {option_note}")
 
 if chosen["paradox"]:
     headline = (f"Access rose. <span class='accent'>{compact(chosen['delta_unserved'])} more people</span> "
@@ -183,6 +240,65 @@ else:
 
 st.subheader("Do the two trends move together?")
 render_co_movement(history, start, end, chosen["country"])
+
+
+def period_history(code):
+    frame = pd.DataFrame([r for r in rows if r["code"] == code and start <= r["year"] <= end]).sort_values("year")
+    return frame.set_index("year").reindex(range(start, end + 1)).rename_axis("year").reset_index()
+
+
+def change_since_start(frame, column):
+    base = frame.loc[frame["year"] == start, column].iloc[0]
+    return (frame[column] / base - 1) * 100 if base else None
+
+
+st.header(f"Compare two countries · {chosen['country']} vs {compare['country']}")
+if compare["code"] == chosen["code"]:
+    st.info("Pick a different comparison country: set the toggle above the map to **Comparison country**, "
+            "then click a country.")
+else:
+    st.caption("To change the comparison, set the toggle above the map to **Comparison country** and click a "
+               "country. Both charts show the percent change from the start year on the same scale.")
+    pair = [(chosen, period_history(chosen["code"])), (compare, period_history(compare["code"]))]
+    pair_changes = [(change_since_start(h, "access_rate"), change_since_start(h, "unserved")) for _, h in pair]
+    series = [v for changes in pair_changes for v in changes if v is not None]
+    low, high = min(0, *(v.min() for v in series)), max(0, *(v.max() for v in series))
+    pad = max(high - low, 1) * 0.1
+    for column, (row, frame), (access_pct, unserved_pct), label in zip(
+            st.columns(2), pair, pair_changes, ("Main", "Comparison")):
+        with column:
+            st.subheader(f"{label} · {row['country']}")
+            fig = go.Figure(go.Scatter(x=frame["year"], y=access_pct, customdata=frame["access_rate"],
+                                       name="Access rate", mode="lines+markers", connectgaps=False,
+                                       line=dict(color=BLUE, width=3),
+                                       hovertemplate="%{x}: %{y:+.1f}% (%{customdata:.1f}% access)<extra></extra>"))
+            if unserved_pct is not None:
+                fig.add_trace(go.Scatter(x=frame["year"], y=unserved_pct, customdata=frame["unserved"] / 1_000_000,
+                                         name="People without access", mode="lines+markers", connectgaps=False,
+                                         line=dict(color=ORANGE, width=3),
+                                         hovertemplate="%{x}: %{y:+.1f}% (%{customdata:,.2f}M people)<extra></extra>"))
+            fig.add_hline(y=0, line=dict(color=GRID, width=2))
+            fig.update_layout(paper_bgcolor=SURFACE, plot_bgcolor=SURFACE, font_color="#e9f0f8", height=320,
+                              margin=dict(l=30, r=20, t=40, b=35), xaxis=dict(dtick=1, gridcolor=GRID),
+                              yaxis=dict(title=f"% change since {start}", ticksuffix="%", gridcolor=GRID,
+                                         range=[low - pad, high + pad]),
+                              legend=dict(orientation="h", y=1.15))
+            st.plotly_chart(fig, key=f"compare_chart_{label}", width="stretch")
+
+    def summary(row, frame):
+        return {
+            "Paradox (access up, gap up)": "Yes" if row["paradox"] else "No",
+            f"Access rate {start} → {end}": f"{row['start_rate']:.1f}% → {row['end_rate']:.1f}%",
+            "People without access, change": f"{'+' if row['delta_unserved'] > 0 else ''}{compact(row['delta_unserved'])}",
+            "Added by population growth": f"{'+' if row['population_effect'] > 0 else ''}{compact(row['population_effect'])}",
+            "Gained electricity (access gains)": compact(-row["access_effect"]),
+            **comparison_rows(co_movement(frame, start, end)),
+        }
+
+    table = pd.DataFrame({row["country"]: summary(row, frame) for row, frame in pair})
+    st.dataframe(table.rename_axis("Measure").reset_index(), width="stretch", hide_index=True)
+    st.caption("Tests use each country's own years in the selected period; see the evidence section above "
+               "for the full statistical details of the main country.")
 
 
 st.header("Where is the hidden gap growing?")

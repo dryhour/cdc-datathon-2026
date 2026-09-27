@@ -24,19 +24,17 @@ streamlit run main/main.py
 The first load calls the World Bank API for country metadata, electricity access
 (`EG.ELC.ACCS.ZS`), and population (`SP.POP.TOTL`). It may take several seconds.
 Results are cached for 24 hours; Streamlit's **Clear cache** fetches again.
-Choose **Map & compare** from the dashboard's sidebar to click country markers
-into comparison slots A and B, or use the country dropdowns. This selector works
-even when Streamlit's automatic page navigation is hidden.
-The two country charts share the same axes for comparison. The map displays
-only comparable countries for which World Bank country coordinates are available.
+Everything is on one page. Click a country marker on the map to load its charts
+and tests. Switch the toggle above the map to **Comparison country** and click
+another marker to compare the two side by side, including their test results. The map shows countries with at least 6 years of data and a changing
+access gap in the selected period, where World Bank coordinates are available.
 
 Other files in this folder:
 
-- `map_view.py` — the map and A/B comparison, shown by **Map & compare** and by `pages/1_Explore_the_map.py`.
 - `visual_template.py` — Derek's visual workbench for trying layouts and chart ideas
   (`streamlit run main/visual_template.py`).
 - `progress.py` — data fetching and paradox calculations; `theme.py` — shared colors and CSS.
-- `trend_tests.py` — the correlation and time-series tests (ADF, KPSS, Ljung-Box, PACF), shared by the dashboard and Map & compare.
+- `trend_tests.py` — the correlation and time-series tests (ADF, KPSS, Ljung-Box, PACF), used by the dashboard.
 - `api_test.py` — a minimal World Bank API request.
 
 ## Method
