@@ -61,6 +61,7 @@ def load_world_bank_data(years=YEARS):
         rows.append({
             "code": code,
             "country": countries[code]["name"],
+            "region": countries[code].get("region", {}).get("value", "").strip(),
             "latitude": _coordinate(countries[code].get("latitude")),
             "longitude": _coordinate(countries[code].get("longitude")),
             "year": year,

@@ -8,9 +8,11 @@ import streamlit as st
 from statsmodels.stats.diagnostic import acorr_ljungbox
 
 from progress import YEARS, compare_years, load_world_bank_data
-from trend_tests import MIN_TEST_YEARS, co_movement, comparison_rows, lag1_pacf, render_co_movement, stationarity
+from trend_tests import (MIN_TEST_YEARS, co_movement, comparison_rows, lag1_pacf, render_co_movement, stationarity,
+                         yoy_correlation, yoy_percent)
 from theme import apply_theme, BLUE, ORANGE, TEAL, MUTED, SURFACE, GRID
 
+DEFAULT_START = 2010
 st.set_page_config(page_title="The Progress Paradox", page_icon="⚡", layout="wide")
 apply_theme()
 
@@ -48,7 +50,9 @@ if len(years) < 2:
 
 with st.sidebar:
     st.header("Compare years")
-    start = st.selectbox("Start year", years[:-1], index=max(0, len(years) - 6))
+    # Default to 2010: a 15-year window gives the time-series tests enough years to be informative.
+    start = st.selectbox("Start year", years[:-1],
+                         index=years.index(DEFAULT_START) if DEFAULT_START in years[:-1] else max(0, len(years) - 6))
     end_options = [year for year in years if year > start]
     end = st.selectbox("End year", end_options, index=len(end_options) - 1)
     st.markdown("**What counts as a paradox?**")
@@ -153,7 +157,10 @@ if clicked and clicked != st.session_state.get(f"last_click_{start}_{end}"):
 selected_code = st.session_state["selected_code"]
 chosen = next(r for r in country_options if r["code"] == selected_code)
 compare = next(r for r in country_options if r["code"] == st.session_state["compare_code"])
-st.caption(f"Main: **{chosen['country']}** · Comparison: **{compare['country']}**. {option_note}")
+unmapped = len(country_options) - len(mapped)
+st.caption(f"Main: **{chosen['country']}** · Comparison: **{compare['country']}**. {option_note}"
+           + (f" {unmapped} of them {'has' if unmapped == 1 else 'have'} no World Bank map coordinates."
+              if unmapped else ""))
 
 if chosen["paradox"]:
     headline = (f"Access rose. <span class='accent'>{compact(chosen['delta_unserved'])} more people</span> "
@@ -218,6 +225,38 @@ with right:
                                     f"People without access · % change since {start}", ORANGE,
                                     "%{customdata:,.2f}M people", y_range),
                         width="stretch")
+
+if unserved_change is not None:
+    # Differencing as year-over-year percent change, so both series share one unit (% vs the previous year).
+    yoy = yoy_percent(history.dropna(subset=["access_rate", "unserved"]).set_index("year")[["access_rate", "unserved"]])
+    access_step, unserved_step = yoy["access_rate"], yoy["unserved"]
+    diff_fig = go.Figure()
+    diff_fig.add_trace(go.Bar(x=yoy.index, y=access_step, name="Access rate", marker_color=BLUE,
+                              hovertemplate="%{x}: %{y:+.1f}% vs previous year<extra>Access rate</extra>"))
+    diff_fig.add_trace(go.Bar(x=yoy.index, y=unserved_step, name="People without access",
+                              marker_color=ORANGE,
+                              hovertemplate="%{x}: %{y:+.1f}% vs previous year<extra>People without access</extra>"))
+    diff_fig.add_hline(y=0, line=dict(color="#93a3ba", width=2))
+    diff_fig.update_layout(
+        title="After differencing · % change vs the previous year", barmode="group", bargap=0.3, bargroupgap=0.08,
+        barcornerradius=4, paper_bgcolor=SURFACE, plot_bgcolor=SURFACE, font_color="#e9f0f8", height=340,
+        margin=dict(l=10, r=25, t=90, b=35), xaxis=dict(dtick=1, gridcolor=GRID, range=[start + 0.5, end + 0.5]),
+        yaxis=dict(title="% change vs previous year", gridcolor=GRID, automargin=True, ticksuffix="%"),
+        legend=dict(orientation="h", x=0, y=1.02, yanchor="bottom"),
+    )
+    st.plotly_chart(diff_fig, width="stretch")
+    step_r = yoy_correlation(yoy)
+    if step_r is None:
+        st.caption("Too few year-over-year changes to correlate: a percent change is undefined in years that "
+                   "follow a year with no one without electricity.")
+    else:
+        link = "less" if step_r < 0 else "more"
+        st.caption(f"Differencing removes the shared trend and keeps only each year's movement. Correlation of "
+                   f"these year-over-year % changes: **{step_r * 100:+.0f}%**, so years with bigger access gains had {link} "
+                   "gap growth. Because the number without access is calculated from the access rate, the two "
+                   "bars are linked by construction."
+                   + (" Orange bars above zero despite blue gains are the years population growth outpaced "
+                      "new connections." if (unserved_step > 0).any() and (access_step > 0).any() else ""))
 
 
 if chosen["paradox"]:
@@ -383,14 +422,16 @@ else:
     st.subheader("Is each country's gap a steady trend?")
     st.write("Time-series checks on each country's number of people without electricity, over the selected years. "
              "**Trend** uses ADF + KPSS on the yearly totals. **Persistence** uses PACF (lag 1) and Ljung-Box on "
-             "the year-to-year changes: does one year's change in the gap carry over into the next?")
+             "the year-over-year % changes: does one year's change in the gap carry over into the next?")
 
     def gap_checks(code):
         series = history_by_code.get(code)
         if series is None or len(series) < MIN_TEST_YEARS:
             return {"Years": 0 if series is None else len(series), "Trend (ADF + KPSS)": "Too few years"}
         state, adf_p, kpss_p = stationarity(series, 1 if len(series) < 12 else 2)
-        changes = series.diff().dropna()
+        changes = yoy_percent(series)
+        if len(changes) < MIN_TEST_YEARS - 1:
+            return {"Years": len(series), "Trend (ADF + KPSS)": state, "ADF p": adf_p, "KPSS p": kpss_p}
         lag1, band = lag1_pacf(changes)
         lb_p = acorr_ljungbox(changes, lags=[1])["lb_pvalue"].iloc[0]
         return {

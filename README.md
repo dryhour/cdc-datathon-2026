@@ -1,55 +1,102 @@
-# cdc-datathon-2026
-todo
-# Notion
-https://cdc2026.notion.site/Carolina-Data-Challenge-2026-AI-for-Social-Good-0cf43707696083e38d0081dbe7d46de6?pvs=18
+# The Progress Paradox
 
-# World Bank Resources
-https://datahelpdesk.worldbank.org/knowledgebase/articles/898581
-https://datahelpdesk.worldbank.org/knowledgebase/articles/889392-about-the-indicators-api-documentation
+**Carolina Data Challenge 2026 · AI for Social Good · Graduate track**
+Team: Derek Perkins, Joshua Salinas
 
+## The problem
 
-# Idea
+Countries report electricity access as a percentage. That percentage can rise while the
+**number of people without electricity also rises**, because the population grows faster
+than new connections. A percentage-only progress report hides that growing need.
 
-Yes. I’d switch to The Progress Paradox. It solves a more precise data problem than the child mortality idea:
-A country reports a higher percentage of people with access to a basic service—but does the number of people without it actually fall?
+This dashboard finds where that happens, ranks the countries, and shows why.
 
-That can go the other way when population grows faster than access expands. The World Bank has documented this problem for electricity access in Sub-Saharan Africa. The Energy Progress Report 2025
-What your tool would do: fetch access rates and population from the World Bank API, calculate people without access = population × (1 − access rate), then flag countries where the access percentage rose while the number left out also rose. Rank those places by the growing gap. A decision maker could use that to spot where an apparently improving metric is hiding a worsening human need.
-I’d start with electricity because the indicators and the real-world problem are clear. Then add safely managed drinking water if its country-year coverage supports it. The World Bank provides the electricity, water, and population series through its data platform. data.worldbank.org
-The demo moment is powerful: “The access rate went up. Why are more people still without access?” Your app answers it visually, identifies where it’s happening, and shows how many additional people would need to gain access just to keep the gap from growing at the recent population-growth pace. That’s a distinct, useful analysis. It helps people prioritize where to investigate and act; it doesn’t pretend a dashboard itself connects homes to power or water.
+## What it does
 
+- Pulls live data from the **World Bank Indicators API**: electricity access
+  (`EG.ELC.ACCS.ZS`) and population (`SP.POP.TOTL`), 1990–2024.
+- Estimates people without electricity: `population × (1 − access rate / 100)`.
+- Flags a **paradox country** when, between two chosen years, the access rate rose *and*
+  the number without electricity rose.
 
+## Run it
 
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r main/requirements.txt
+.venv/bin/python -m streamlit run main/main.py
+```
 
+## Visualizations
 
+Everything is on one page. Pick the years in the sidebar (default 2010–2024).
 
-    
+1. **Clickable world map.** Orange = paradox, teal = gap shrank. Click a country to explore
+   it, or switch the toggle to pick a second country to compare.
+2. **The evidence.** The access rate and the number without electricity, both as % change
+   from the start year on the same scale, plus a bar chart of each year's % change.
+3. **Do the two trends move together?** Correlation, checked with time-series tests.
+4. **Compare two countries.** Side-by-side charts and a table of results.
+5. **Where is the hidden gap growing?** A ranked chart that splits each paradox country's
+   change into people who gained electricity vs. new people without it (population growth).
 
+## Methods
 
+- **Percent change** from the start year, so both series share one unit.
+- **Differencing** as year-over-year % change, to remove the shared trend.
+- **Correlation** (Pearson) of the raw series and of the differenced series.
+- **Stationarity:** ADF and KPSS tests; a series is labeled only when both agree.
+- **Autocorrelation:** Ljung-Box and PACF (lag 1) on regression residuals and yearly changes.
+- **Decomposition:** each gap change split exactly into a population-growth part and an
+  access-gains part (midpoint weights).
 
+Significance level 0.05. With few years the tests have low power, so the app warns under 15 years.
 
+## Key findings (2010–2024, the default period)
 
+We use 2010–2024 because 15 years give the time-series tests enough data to be informative.
 
+- **The world is improving, but the gap is concentrating.** People without electricity fell
+  from 1,154M to 655M across the 215 countries with data in both years, yet **Sub-Saharan Africa's share rose from 52% to 88%**
+  (596M → 579M there, while the rest of the world went from 558M to 76M).
+- **16 paradox countries**, with **58.3 million more people** without electricity in total.
+  **All 16 are in Sub-Saharan Africa.**
+- **They did improve, just not fast enough:** the median paradox country gained 14.5
+  percentage points of access (up to 22.5).
+- **DR Congo** is the largest: access rose from 13.0% to 22.5%, yet **25.0M more people**
+  were left without electricity. Population growth added 33.5M; access gains removed 8.5M.
+- Next: Niger (+7.0M), Chad (+6.1M), Malawi (+4.7M), Mozambique (+3.2M).
+- In **every** paradox country, population growth outweighed access gains.
+- **A target to act on:** to hold its 2010 gap steady at its 2024 population, DR Congo
+  needed **45.4% access**, about double the reported 22.5%. The app shows this for each country.
+- **It isn't inevitable:** 120 countries shrank their gap by 560M people in total, led by
+  India (−293M) and Bangladesh (−67M).
+- For 12 of the 16, the number without electricity is **non-stationary**: a sustained
+  upward trend, not year-to-year noise (ADF + KPSS).
 
-so how would it be with rubric
+These are estimates built from reported rates; they describe what happened and don't prove causes.
 
+## Files
 
+| Path | Purpose |
+|---|---|
+| `main/main.py` | The dashboard |
+| `main/progress.py` | World Bank API fetch and paradox calculations |
+| `main/trend_tests.py` | Correlation, ADF, KPSS, Ljung-Box and PACF |
+| `main/export_data.py` | Saves the processed data to `main/data/` |
+| `main/data/` | Processed data snapshot (country-year panel and the 2010–2024 comparison) |
+| `main/theme.py` | Colors and styles |
+| `main/README.md` | More detail on the method and a demo script |
 
+## Data and citations
 
-
-
-
-
-
-
-
-
-
-For The Progress Paradox, I’d estimate 45/50 if executed really well:
-Criterion	Estimate	Why
-Impact and Applicability	9/10	Helps identify places where reported progress hides a growing number of people without a basic service.
-Completeness	9/10	Feasible to finish: API fetch, rate-to-people calculation, trend detection, ranking, and country detail.
-Innovation and Creativity	8/10	The underlying population-growth problem is known, but turning it into an interactive alert and prioritization tool is a fresh presentation.
-Visualization	10/10	Two lines moving in opposite directions—access rate up, people left out up—is immediately understandable and memorable.
-Presentation	9/10	One real country example could deliver a strong reveal, followed by a clear explanation of the math and who could use it.
-Total	45/50	A higher ceiling than a general health dashboard.
+- World Bank, *World Development Indicators*, via the
+  [Indicators API](https://datahelpdesk.worldbank.org/knowledgebase/articles/889392-about-the-indicators-api-documentation):
+  [EG.ELC.ACCS.ZS](https://data.worldbank.org/indicator/EG.ELC.ACCS.ZS),
+  [SP.POP.TOTL](https://data.worldbank.org/indicator/SP.POP.TOTL). Licensed CC BY 4.0.
+- Dickey & Fuller (1979), *JASA* 74(366) — ADF test.
+- Kwiatkowski, Phillips, Schmidt & Shin (1992), *Journal of Econometrics* 54 — KPSS test.
+- Ljung & Box (1978), *Biometrika* 65(2) — Ljung-Box test.
+- Box & Jenkins (1970), *Time Series Analysis: Forecasting and Control* — PACF.
+- Kitagawa (1955), *JASA* 50(272) — decomposing a change into components.
+- Seabold & Perktold (2010), *statsmodels*, Proc. 9th Python in Science Conference.

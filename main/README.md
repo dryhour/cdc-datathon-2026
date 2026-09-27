@@ -35,6 +35,7 @@ Other files in this folder:
   (`streamlit run main/visual_template.py`).
 - `progress.py` — data fetching and paradox calculations; `theme.py` — shared colors and CSS.
 - `trend_tests.py` — the correlation and time-series tests (ADF, KPSS, Ljung-Box, PACF), used by the dashboard.
+- `export_data.py` — saves the processed data to `data/` (`python main/export_data.py`).
 - `api_test.py` — a minimal World Bank API request.
 
 ## Method
@@ -62,7 +63,7 @@ Below them, the dashboard reports the Pearson correlation of the two series over
 selected years, then checks it: ADF and KPSS tests for stationarity (a series is
 labeled only when both tests agree), a Ljung-Box test for autocorrelation in the
 regression residuals (a sign of spurious correlation), and the correlation after
-first differencing. Everything updates with the selected country and years; use at
+differencing, using year-over-year percent change, also shown as a bar chart. Everything updates with the selected country and years; use at
 least 6 years, and 15 or more for reliable tests. Tests use `statsmodels`.
 
 ## Demo story

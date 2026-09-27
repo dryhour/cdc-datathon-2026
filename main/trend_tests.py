@@ -13,11 +13,11 @@ MIN_TEST_YEARS = 6
 
 def stationarity(series, lags):
     """Combine ADF (null: unit root) and KPSS (null: stationary); only call it when they agree."""
-    adf_p = adfuller(series, regression="c", maxlag=lags, autolag=None)[1]
+    adf_p = adfuller(series, regression="c", maxlag=lags, autolag=None, result_object=False)[1]
     with warnings.catch_warnings():
         # KPSS warns when its p-value falls outside the lookup table; the clipped value is still usable.
         warnings.simplefilter("ignore", InterpolationWarning)
-        kpss_p = kpss(series, regression="c", nlags=lags)[1]
+        kpss_p = kpss(series, regression="c", nlags=lags, result_object=False)[1]
     if adf_p < 0.05 and kpss_p >= 0.05:
         label = "Stationary"
     elif adf_p >= 0.05 and kpss_p < 0.05:
@@ -30,6 +30,19 @@ def stationarity(series, lags):
 def lag1_pacf(series):
     """Lag-1 partial autocorrelation and its 95% band (±1.96/√n)."""
     return pacf(series, nlags=1, method="ywm")[1], 1.96 / np.sqrt(len(series))
+
+
+def yoy_percent(frame):
+    """Differencing as year-over-year percent change: (this year / previous year − 1) × 100.
+    A previous value of 0 has no percent change, so those years are dropped."""
+    return (frame / frame.shift(1) - 1).mul(100).replace([np.inf, -np.inf], np.nan).dropna()
+
+
+def yoy_correlation(yoy):
+    """Correlation of the two year-over-year % change series; None with fewer than 3 years or no variation."""
+    if len(yoy) < 3 or yoy.std().min() == 0:
+        return None
+    return yoy["access_rate"].corr(yoy["unserved"])
 
 
 def correlation_label(r):
@@ -51,6 +64,7 @@ def co_movement(history, start, end):
     access, unserved = window["access_rate"], window["unserved"]
     lags = 1 if n < 12 else 2
     steps = window[["access_rate", "unserved"]].diff().dropna()
+    yoy = yoy_percent(window[["access_rate", "unserved"]])
     access_state, access_adf, access_kpss = stationarity(access, lags)
     unserved_state, unserved_adf, unserved_kpss = stationarity(unserved, lags)
     # Ljung-Box on the residuals of unserved regressed on access: autocorrelated residuals flag a spurious fit.
@@ -63,7 +77,7 @@ def co_movement(history, start, end):
     return {
         "n": n, "lags": lags, "lb_lags": lb_lags,
         "raw_r": access.corr(unserved),
-        "diff_r": steps["access_rate"].corr(steps["unserved"]) if steps.std().min() > 0 else None,
+        "diff_r": yoy_correlation(yoy),
         "access_state": access_state, "access_adf": access_adf, "access_kpss": access_kpss,
         "unserved_state": unserved_state, "unserved_adf": unserved_adf, "unserved_kpss": unserved_kpss,
         "lb_p": lb_p, "autocorrelated": lb_p < 0.05,
@@ -105,14 +119,14 @@ def render_co_movement(history, start, end, country):
     else:
         verdict += " The regression residuals show no autocorrelation, so the trend relationship is fairly stable."
     if diff_r is not None:
-        verdict += (f" After differencing, the correlation is {correlation_label(diff_r)}: years with bigger access "
-                    f"gains had {'less' if diff_r < 0 else 'more'} gap growth.")
+        verdict += (f" After differencing (year-over-year % change), the correlation is {correlation_label(diff_r)}: "
+                    f"years with bigger access gains had {'less' if diff_r < 0 else 'more'} gap growth.")
     st.markdown(verdict)
 
     t1, t2, t3 = st.columns(3)
     t1.metric("Raw correlation", correlation_label(raw_r), "levels, same years", delta_color="off")
     t2.metric("Correlation after differencing", correlation_label(diff_r) if diff_r is not None else "n/a",
-              "year-to-year changes", delta_color="off")
+              "year-over-year % change", delta_color="off")
     t3.metric("Gap grew as access rose", gap_grew_label(t),
               f"{t['grew_years']} of {t['rose_years']} years access rose", delta_color="off")
     t4, t5, t6 = st.columns(3)
@@ -146,7 +160,7 @@ def render_co_movement(history, start, end, country):
         st.caption("Significance level 0.05. A series is called stationary only when ADF rejects and KPSS does not, "
                    "and non-stationary only when KPSS rejects and ADF does not; otherwise it is inconclusive. "
                    f"ADF and KPSS use a constant and {lags} lag{'s' if lags > 1 else ''}. Correlations are Pearson r; "
-                   "differencing uses first differences. Residuals come from an OLS fit of people without access "
+                   "differencing uses year-over-year percent change. Residuals come from an OLS fit of people without access "
                    "on access rate. The unserved count is calculated from the access rate and population, so some "
                    "link between the two series is built into the data.")
 
